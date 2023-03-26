@@ -1,22 +1,8 @@
-/**
- * fatrace - Trace system wide file access events.
- *
- * (C) 2012 Canonical Ltd.
- * Author: Martin Pitt <martin.pitt@ubuntu.com>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+//
+// Created by maciek on 3/26/23.
+//
 
+#include "includes/fatrace_backend.h"
 #define _LARGEFILE64_SOURCE
 #define _GNU_SOURCE
 
@@ -54,46 +40,46 @@
 #endif
 
 /* command line options */
-static char *option_output = NULL;
-static long option_filter_mask = 0xffffffff;
-static long option_timeout = -1;
-static int option_current_mount = 0;
-static int option_timestamp = 0;
-static pid_t ignored_pids[1024];
-static unsigned int ignored_pids_len = 0;
-static char *option_comm = NULL;
+char *option_output = NULL;
+long option_filter_mask = 0xffffffff;
+long option_timeout = -1;
+int option_current_mount = 0;
+int option_timestamp = 0;
+pid_t ignored_pids[1024];
+unsigned int ignored_pids_len = 0;
+char *option_comm = NULL;
 
 /* --time alarm sets this to 0 */
-static volatile int running = 1;
-static volatile int signaled = 0;
+volatile int running = 1;
+volatile int signaled = 0;
 
 /* FAN_MARK_FILESYSTEM got introduced in Linux 4.20; do_mark falls back to
  * _MOUNT */
 #ifdef FAN_MARK_FILESYSTEM
-static int mark_mode = FAN_MARK_ADD | FAN_MARK_FILESYSTEM;
+int mark_mode = FAN_MARK_ADD | FAN_MARK_FILESYSTEM;
 #else
-static int mark_mode = FAN_MARK_ADD | FAN_MARK_MOUNT;
+int mark_mode = FAN_MARK_ADD | FAN_MARK_MOUNT;
 #endif
 
 /* FAN_REPORT_FID mode got introduced in Linux 5.1 */
 #ifdef FAN_REPORT_FID
-static int fid_mode;
+int fid_mode;
 
 /* fsid → mount fd map */
 
 #define MAX_MOUNTS 100
-static struct {
+struct {
   fsid_t fsid;
   int mount_fd;
 } fsids[MAX_MOUNTS];
-static size_t fsids_len;
+size_t fsids_len;
 
 /**
  * add_fsid:
  *
  * Add fsid → mount fd map entry for a particular mount point
  */
-static void add_fsid(const char *mount_point) {
+void add_fsid(const char *mount_point) {
   struct statfs s;
   int fd;
 
@@ -119,7 +105,7 @@ static void add_fsid(const char *mount_point) {
   debug("mount %s fd %i", mount_point, fd);
 }
 
-static int get_mount_id(const fsid_t *fsid) {
+int get_mount_id(const fsid_t *fsid) {
   for (size_t i = 0; i < fsids_len; ++i) {
     if (memcmp(fsid, &fsids[i].fsid, sizeof(fsids[i].fsid)) == 0) {
       debug("mapped fsid to fd %i", fsids[i].mount_fd);
@@ -136,7 +122,7 @@ static int get_mount_id(const fsid_t *fsid) {
  *
  * In FAN_REPORT_FID mode, return an fd for the event's target.
  */
-static int get_fid_event_fd(const struct fanotify_event_metadata *data) {
+int get_fid_event_fd(const struct fanotify_event_metadata *data) {
   const struct fanotify_event_info_fid *fid =
       (const struct fanotify_event_info_fid *)(data + 1);
   int fd;
@@ -169,8 +155,8 @@ static int get_fid_event_fd(const struct fanotify_event_metadata *data) {
  *
  * Returns: decoded mask; only valid until the next call, do not free.
  */
-static const char *mask2str(uint64_t mask) {
-  static char buffer[10];
+const char *mask2str(uint64_t mask) {
+  char buffer[10];
   int offset = 0;
 
   if (mask & FAN_ACCESS)
@@ -203,7 +189,7 @@ static const char *mask2str(uint64_t mask) {
  *
  * Returns: true if PID is to be logged, false if not.
  */
-static bool show_pid(pid_t pid) {
+bool show_pid(pid_t pid) {
   unsigned int i;
   for (i = 0; i < ignored_pids_len; ++i)
     if (pid == ignored_pids[i])
@@ -217,14 +203,14 @@ static bool show_pid(pid_t pid) {
  *
  * Print data from fanotify_event_metadata struct to stdout.
  */
-static void print_event(const struct fanotify_event_metadata *data,
-                        const struct timeval *event_time) {
+void print_event(const struct fanotify_event_metadata *data,
+                 const struct timeval *event_time) {
   int proc_fd;
   int event_fd = data->fd;
-  static char printbuf[100];
-  static char procname[100];
-  static int procname_pid = -1;
-  static char pathname[PATH_MAX];
+  char printbuf[100];
+  char procname[100];
+  int procname_pid = -1;
+  char pathname[PATH_MAX];
   bool got_procname = false;
   struct stat st;
 
@@ -310,7 +296,7 @@ static void print_event(const struct fanotify_event_metadata *data,
          data->pid, mask2str(data->mask), pathname);
 }
 
-static void do_mark(int fan_fd, const char *dir, bool fatal) {
+void do_mark(int fan_fd, const char *dir, bool fatal) {
   int res;
   uint64_t mask = FAN_ACCESS | FAN_MODIFY | FAN_OPEN | FAN_CLOSE | FAN_ONDIR |
                   FAN_EVENT_ON_CHILD;
@@ -348,7 +334,7 @@ static void do_mark(int fan_fd, const char *dir, bool fatal) {
  * Set up fanotify watches on all mount points, or on the current directory
  * mount if --current-mount is given.
  */
-static void setup_fanotify(int fan_fd) {
+void setup_fanotify(int fan_fd) {
   FILE *mounts;
   struct mntent *mount;
 
@@ -397,7 +383,7 @@ static void setup_fanotify(int fan_fd) {
  *
  * Show help.
  */
-static void help(void) {
+void help(void) {
   puts("Usage: fatrace [options...] \n"
        "\n"
        "Options:\n"
@@ -422,22 +408,21 @@ static void help(void) {
  *
  * Parse command line arguments and set the global option_* variables.
  */
-static void parse_args(int argc, char **argv) {
+void parse_args(int argc, char **argv) {
   int c;
   int j;
   long pid;
   char *endptr;
 
-  static struct option long_options[] = {
-      {"current-mount", no_argument, 0, 'c'},
-      {"output", required_argument, 0, 'o'},
-      {"seconds", required_argument, 0, 's'},
-      {"timestamp", no_argument, 0, 't'},
-      {"ignore-pid", required_argument, 0, 'p'},
-      {"filter", required_argument, 0, 'f'},
-      {"command", required_argument, 0, 'C'},
-      {"help", no_argument, 0, 'h'},
-      {0, 0, 0, 0}};
+  struct option long_options[] = {{"current-mount", no_argument, 0, 'c'},
+                                  {"output", required_argument, 0, 'o'},
+                                  {"seconds", required_argument, 0, 's'},
+                                  {"timestamp", no_argument, 0, 't'},
+                                  {"ignore-pid", required_argument, 0, 'p'},
+                                  {"filter", required_argument, 0, 'f'},
+                                  {"command", required_argument, 0, 'C'},
+                                  {"help", no_argument, 0, 'h'},
+                                  {0, 0, 0, 0}};
 
   while (1) {
     c = getopt_long(argc, argv, "C:co:s:tp:f:h", long_options, NULL);
@@ -532,7 +517,7 @@ static void parse_args(int argc, char **argv) {
   }
 }
 
-static void signal_handler(int signal) {
+void signal_handler(int signal) {
   (void)signal;
 
   /* ask the main loop to stop */
@@ -542,110 +527,4 @@ static void signal_handler(int signal) {
   /* but if stuck in some others functions, just quit now */
   if (signaled > 1)
     _exit(EXIT_FAILURE);
-}
-
-int main(int argc, char **argv) {
-  int fan_fd = -1;
-  int res;
-  void *buffer;
-  struct fanotify_event_metadata *data;
-  struct sigaction sa;
-  struct timeval event_time;
-
-  /* always ignore events from ourselves (writing log file) */
-  ignored_pids[ignored_pids_len++] = getpid();
-
-  parse_args(argc, argv);
-
-#ifdef FAN_REPORT_FID
-  fan_fd = fanotify_init(FAN_CLASS_NOTIF | FAN_REPORT_FID, O_LARGEFILE);
-  if (fan_fd >= 0)
-    fid_mode = 1;
-
-  if (fan_fd < 0 && errno == EINVAL)
-    debug("FAN_REPORT_FID not available");
-#endif
-  if (fan_fd < 0)
-    fan_fd = fanotify_init(0, O_LARGEFILE);
-
-  if (fan_fd < 0) {
-    int e = errno;
-    perror("Cannot initialize fanotify");
-    if (e == EPERM)
-      fputs("You need to run this program as root.\n", stderr);
-    exit(EXIT_FAILURE);
-  }
-
-  setup_fanotify(fan_fd);
-
-  /* allocate memory for fanotify */
-  buffer = NULL;
-  res = posix_memalign(&buffer, 4096, BUFSIZE);
-  if (res != 0 || buffer == NULL)
-    err(EXIT_FAILURE, "Failed to allocate buffer");
-
-  /* output file? */
-  if (option_output) {
-    int fd = open(option_output, O_CREAT | O_WRONLY | O_EXCL, 0666);
-    if (fd < 0)
-      err(EXIT_FAILURE, "Failed to open output file");
-    fflush(stdout);
-    dup2(fd, STDOUT_FILENO);
-    close(fd);
-  }
-
-  /* useful for live tailing and multiple writers */
-  setlinebuf(stdout);
-
-  /* setup signal handler to cleanly stop the program */
-  sa.sa_handler = signal_handler;
-  sigemptyset(&sa.sa_mask);
-  sa.sa_flags = 0;
-  if (sigaction(SIGINT, &sa, NULL) < 0)
-    err(EXIT_FAILURE, "sigaction");
-
-  /* set up --time alarm */
-  if (option_timeout > 0) {
-    sa.sa_handler = signal_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    if (sigaction(SIGALRM, &sa, NULL) < 0)
-      err(EXIT_FAILURE, "sigaction");
-    alarm(option_timeout);
-  }
-
-  /* clear event time if timestamp is not required */
-  if (!option_timestamp) {
-    memset(&event_time, 0, sizeof(struct timeval));
-  }
-
-  /* read all events in a loop */
-  while (running) {
-    res = read(fan_fd, buffer, BUFSIZE);
-    if (res == 0) {
-      fprintf(stderr, "No more fanotify event (EOF)\n");
-      break;
-    }
-    if (res < 0) {
-      if (errno == EINTR)
-        continue;
-      err(EXIT_FAILURE, "read");
-    }
-
-    /* get event time, if requested */
-    if (option_timestamp) {
-      if (gettimeofday(&event_time, NULL) < 0)
-        err(EXIT_FAILURE, "gettimeofday");
-    }
-
-    data = (struct fanotify_event_metadata *)buffer;
-    while (FAN_EVENT_OK(data, res)) {
-      if (data->vers != FANOTIFY_METADATA_VERSION)
-        errx(EXIT_FAILURE, "Mismatch of fanotify metadata version");
-      print_event(data, &event_time);
-      data = FAN_EVENT_NEXT(data, res);
-    }
-  }
-
-  return 0;
 }

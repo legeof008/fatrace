@@ -1,5 +1,27 @@
-
+#include <ctype.h>
+#include <dirent.h>
+#include <err.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <getopt.h>
+#include <limits.h>
+#include <mntent.h>
+#include <signal.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/fanotify.h>
+#include <sys/stat.h>
+#include <sys/statfs.h>
+#include <sys/sysmacros.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
+
+#include <fatrace_backend.h>
 
 int main(int argc, char **argv) {
   int fan_fd = -1;
